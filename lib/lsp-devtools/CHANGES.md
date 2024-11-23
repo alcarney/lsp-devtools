@@ -1,3 +1,15 @@
+## v0.2.4 - 2024-11-23
+
+### Fixes
+
+- The `lsp-devtools agent` should now suppress `asyncio.CancelledError` exceptions allowing the agent to process to terminate gracefully ([#191](https://github.com/swyddfa/lsp-devtools/issues/191))
+
+### Misc
+
+- Drop Python 3.8 support ([#190](https://github.com/swyddfa/lsp-devtools/issues/190))
+- Migrate to pygls `v2.0a2` ([#192](https://github.com/swyddfa/lsp-devtools/issues/192))
+
+
 ## v0.2.3 - 2024-05-22
 
 
