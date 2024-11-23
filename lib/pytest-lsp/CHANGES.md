@@ -1,3 +1,14 @@
+## v1.0.0b2 - 2024-11-23
+
+### Fixes
+
+- `pytest-lsp` is now able to detect the situation where the server process exits while the client is waiting on a notification message and fail the test accordingly ([#186](https://github.com/swyddfa/lsp-devtools/issues/186))
+
+### Misc
+
+- Update `pygls` to `v2.0a2` ([#188](https://github.com/swyddfa/lsp-devtools/issues/188))
+
+
 ## v1.0.0b1 - 2024-09-04
 
 ### Breaking Changes
