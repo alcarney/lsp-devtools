@@ -56,7 +56,10 @@ async def main(args, extra: list[str]):
 
 
 def run_agent(args, extra: list[str]):
-    asyncio.run(main(args, extra))
+    try:
+        asyncio.run(main(args, extra))
+    except asyncio.CancelledError:
+        pass
 
 
 def cli(commands: argparse._SubParsersAction):
