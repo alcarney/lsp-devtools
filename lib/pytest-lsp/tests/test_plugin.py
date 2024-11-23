@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import pathlib
 import sys
-from typing import Any
-from typing import Dict
-from typing import List
+import typing
 
 import pygls.uris as uri
 import pytest
 
 from pytest_lsp.plugin import ClientServerConfig
+
+if typing.TYPE_CHECKING:
+    from typing import Any
 
 
 @pytest.mark.parametrize(
@@ -59,7 +62,7 @@ from pytest_lsp.plugin import ClientServerConfig
     ],
 )
 def test_get_server_command(
-    config: ClientServerConfig, kwargs: Dict[str, Any], expected: List[str]
+    config: ClientServerConfig, kwargs: dict[str, Any], expected: list[str]
 ):
     """Ensure that we can build the server start command correctly."""
     actual = config.get_server_command(**kwargs)
@@ -130,7 +133,7 @@ async def test_capabilities(client):
 
     results.assert_outcomes(errors=1)
 
-    message = r"E\s+RuntimeError: Server process \d+ exited with code: 0"
+    message = r"E\s+RuntimeError: Server process \d+ exited with return code: 0"
     results.stdout.re_match_lines(message)
 
 
@@ -162,7 +165,44 @@ async def test_capabilities(client):
 
     results.assert_outcomes(failed=1, errors=1)
 
-    message = r"E\s+RuntimeError: Server process \d+ exited with code: 0"
+    message = r"E\s+RuntimeError: Server process \d+ exited with return code: 0"
+    results.stdout.re_match_lines(message)
+    results.stdout.fnmatch_lines("E*RuntimeError: Client has been stopped.")
+
+
+def test_detect_server_exit_pending_notification(pytester: pytest.Pytester):
+    """Ensure that the plugin can detect when the server process exits while the client
+    is waiting for a notification to arrive."""
+
+    test_code = """\
+import pytest
+from lsprotocol.types import CompletionParams
+from lsprotocol.types import Position
+from lsprotocol.types import TextDocumentIdentifier
+
+
+@pytest.mark.asyncio
+async def test_capabilities(client):
+    expected = {str(i) for i in range(10)}
+
+    for i in range(10):
+        client.protocol.notify("server/exit")
+        await client.wait_for_notification("never/happening")
+
+        params = CompletionParams(
+            text_document=TextDocumentIdentifier(uri="file:///test.txt"),
+            position=Position(line=0, character=0)
+        )
+        items = await client.text_document_completion_async(params)
+        assert len({i.label for i in items} & expected) == len(items)
+"""
+
+    setup_test(pytester, "notify_exit.py", test_code)
+    results = pytester.runpytest("-vv")
+
+    results.assert_outcomes(failed=1, errors=1)
+
+    message = r"E\s+RuntimeError: Server process \d+ exited with return code: 0"
     results.stdout.re_match_lines(message)
     results.stdout.fnmatch_lines("E*RuntimeError: Client has been stopped.")
 
@@ -183,7 +223,7 @@ async def test_capabilities(client):
 
     results.assert_outcomes(errors=1)
 
-    message = r"E\s+RuntimeError: Server process \d+ exited with code: 1"
+    message = r"E\s+RuntimeError: Server process \d+ exited with return code: 1"
     results.stdout.re_match_lines(message)
     results.stdout.fnmatch_lines("ZeroDivisionError: division by zero")
 
@@ -215,11 +255,7 @@ async def test_capabilities(client):
     setup_test(pytester, "invalid_json.py", test_code)
     results = pytester.runpytest("-vv")
 
-    results.assert_outcomes(errors=1, failed=1)
+    results.assert_outcomes(failed=1)
 
-    if sys.version_info < (3, 9):
-        message = "E*CancelledError"
-    else:
-        message = "E*asyncio.exceptions.CancelledError: JsonRpcInternalError: *"
-
+    message = "E*json.decoder.JSONDecodeError: *"
     results.stdout.fnmatch_lines(message)

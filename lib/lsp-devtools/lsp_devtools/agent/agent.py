@@ -15,15 +15,13 @@ from uuid import uuid4
 import attrs
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Coroutine
     from typing import Any
     from typing import BinaryIO
     from typing import Callable
-    from typing import Coroutine
-    from typing import Dict
-    from typing import Optional
-    from typing import Set
-    from typing import Tuple
     from typing import Union
+
+    from pygls.io_ import AsyncReader
 
     MessageHandler = Callable[[bytes], Union[None, Coroutine[Any, Any, None]]]
 
@@ -35,9 +33,9 @@ logger = logging.getLogger("lsp_devtools.agent")
 class RPCMessage:
     """A Json-RPC message."""
 
-    headers: Dict[str, str]
+    headers: dict[str, str]
 
-    body: Dict[str, Any]
+    body: dict[str, Any]
 
     def __getitem__(self, key: str):
         return self.headers[key]
@@ -46,8 +44,8 @@ class RPCMessage:
 def parse_rpc_message(data: bytes) -> RPCMessage:
     """Parse a JSON-RPC message from the given set of bytes."""
 
-    headers: Dict[str, str] = {}
-    body: Optional[Dict[str, Any]] = None
+    headers: dict[str, str] = {}
+    body: dict[str, Any] | None = None
     headers_complete = False
 
     for line in data.split(b"\r\n"):
@@ -78,7 +76,7 @@ def parse_rpc_message(data: bytes) -> RPCMessage:
     return RPCMessage(headers, body)
 
 
-async def aio_readline(reader: asyncio.StreamReader, message_handler: MessageHandler):
+async def aio_readline(reader: AsyncReader, message_handler: MessageHandler):
     CONTENT_LENGTH_PATTERN = re.compile(rb"^Content-Length: (\d+)\r\n$")
 
     # Initialize message buffer
@@ -118,7 +116,7 @@ async def aio_readline(reader: asyncio.StreamReader, message_handler: MessageHan
 
 async def get_streams(
     stdin, stdout
-) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     """Convert blocking stdin/stdout streams into async streams."""
     loop = asyncio.get_running_loop()
 
@@ -150,9 +148,9 @@ class Agent:
         self.handler = handler
         self.session_id = str(uuid4())
 
-        self._tasks: Set[asyncio.Task] = set()
-        self.reader: Optional[asyncio.StreamReader] = None
-        self.writer: Optional[asyncio.StreamWriter] = None
+        self._tasks: set[asyncio.Task] = set()
+        self.reader: asyncio.StreamReader | None = None
+        self.writer: asyncio.StreamWriter | None = None
 
     async def start(self):
         # Get async versions of stdin/stdout
@@ -226,13 +224,10 @@ class Agent:
             except TimeoutError:
                 self.server.kill()
 
-        args = {}
-        if sys.version_info >= (3, 9):
-            args["msg"] = "lsp-devtools agent is stopping."
-
         # Cancel the tasks connecting client to server
         for task in self._tasks:
-            task.cancel(**args)
+            logger.debug("cancelling: %s", task)
+            task.cancel(msg="lsp-devtools agent is stopping.")
 
         if self.writer:
             self.writer.close()

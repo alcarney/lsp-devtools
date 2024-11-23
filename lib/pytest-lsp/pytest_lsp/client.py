@@ -23,6 +23,7 @@ from .checks import LspSpecificationWarning
 from .protocol import LanguageClientProtocol
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Sequence
     from typing import Any
 
 
@@ -53,7 +54,7 @@ class LanguageClient(BaseLanguageClient):
         self.log_messages: list[types.LogMessageParams] = []
         """Holds any received ``window/logMessage`` requests."""
 
-        self.diagnostics: dict[str, list[types.Diagnostic]] = {}
+        self.diagnostics: dict[str, Sequence[types.Diagnostic]] = {}
         """Holds any recieved diagnostics."""
 
         self.progress_reports: dict[
@@ -99,17 +100,16 @@ class LanguageClient(BaseLanguageClient):
         if self._stop_event.is_set():
             return
 
-        # TODO: Should the upstream base client be doing this?
-        # Cancel any pending futures.
-        reason = f"Server process {server.pid} exited with code: {server.returncode}"
-
-        for id_, fut in self.protocol._request_futures.items():
+        reason = (
+            f"Server process {server.pid} exited with return code: {server.returncode}"
+        )
+        for id_, fut in self.protocol._notification_futures.items():
             if not fut.done():
                 fut.set_exception(RuntimeError(reason))
                 logger.debug("Cancelled pending request '%s': %s", id_, reason)
 
     def report_server_error(
-        self, error: Exception, source: PyglsError | JsonRpcException
+        self, error: Exception, source: type[PyglsError | JsonRpcException]
     ):
         """Called when the server does something unexpected, e.g. sending malformed
         JSON."""
@@ -117,12 +117,13 @@ class LanguageClient(BaseLanguageClient):
         tb = "".join(traceback.format_exc())
 
         message = f"{source.__name__}: {error}\n{tb}"  # type: ignore
+        for id_, fut in self.protocol._request_futures.items():
+            if not fut.done():
+                fut.set_exception(RuntimeError(message))
+                logger.debug("Cancelled pending request '%s': %s", id_, message)
 
-        loop = asyncio.get_running_loop()
-        loop.call_soon(cancel_all_tasks, message)
-
-        if self._stop_event:
-            self._stop_event.set()
+        if self._server:
+            self._server.terminate()
 
     def get_configuration(
         self, *, section: str | None = None, scope_uri: str | None = None
